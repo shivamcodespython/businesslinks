@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { useBizLink } from '@/context/BizLinkContext';
-import { Business, BusinessRole, SupplyRelationship } from '@/types';
+import { Business, SupplyRelationship, UniversalRelationshipType } from '@/types';
 import {
   Layers,
   ZoomIn,
@@ -11,601 +11,637 @@ import {
   Filter,
   ShieldCheck,
   Star,
-  ArrowDown,
-  Info,
-  Building2,
   ExternalLink,
   PlusCircle,
+  Globe,
+  Briefcase,
+  Users,
+  CheckCircle2,
+  Sparkles,
+  ArrowRight,
+  Handshake,
+  FileText,
+  Building2,
+  X,
 } from 'lucide-react';
+import { UNIVERSAL_RELATIONSHIP_TYPES, GLOBAL_COUNTRIES } from '@/data/taxonomy';
 
-interface GraphNode {
+interface NodeCoordinate {
   id: string;
   business: Business;
-  tier: number; // 0: Manufacturer, 1: Super Wholesaler, 2: Wholesaler, 3: My Business, 4: Downstream Retailers, 5: Customers
   x: number;
   y: number;
+  angle: number;
+  radius: number;
+  sectorColor: string;
   isMyBusiness: boolean;
 }
+
+const SECTOR_COLORS: Record<string, { bg: string; border: string; text: string; stroke: string }> = {
+  'Technology, AI & Software': { bg: 'bg-blue-900/60', border: 'border-blue-500', text: 'text-blue-300', stroke: '#3b82f6' },
+  'Healthcare, Biotech & Medical': { bg: 'bg-teal-900/60', border: 'border-teal-500', text: 'text-teal-300', stroke: '#14b8a6' },
+  'Media, Marketing & Creative Design': { bg: 'bg-fuchsia-900/60', border: 'border-fuchsia-500', text: 'text-fuchsia-300', stroke: '#d946ef' },
+  'Manufacturing & Industrial Production': { bg: 'bg-amber-900/60', border: 'border-amber-500', text: 'text-amber-300', stroke: '#f59e0b' },
+  'Logistics, Supply Chain & Transport': { bg: 'bg-sky-900/60', border: 'border-sky-500', text: 'text-sky-300', stroke: '#0284c7' },
+  'Construction, Architecture & Real Estate': { bg: 'bg-orange-900/60', border: 'border-orange-500', text: 'text-orange-300', stroke: '#ea580c' },
+  'Finance, Legal & Professional Advisory': { bg: 'bg-indigo-900/60', border: 'border-indigo-500', text: 'text-indigo-300', stroke: '#6366f1' },
+  'Agriculture, Farming & Environmental': { bg: 'bg-emerald-900/60', border: 'border-emerald-500', text: 'text-emerald-300', stroke: '#10b981' },
+  'Hospitality, Food Science & Tourism': { bg: 'bg-yellow-900/60', border: 'border-yellow-500', text: 'text-yellow-300', stroke: '#eab308' },
+  'Local Services & Skilled Specialists': { bg: 'bg-rose-900/60', border: 'border-rose-500', text: 'text-rose-300', stroke: '#f43f5e' },
+};
 
 export function SupplyChainGraph() {
   const {
     myBusiness,
     businesses,
     relationships,
+    connectBusinesses,
     setInspectingBusiness,
     setDashboardView,
   } = useBizLink();
 
   const [zoomLevel, setZoomLevel] = useState(1);
-  const [selectedTierFilter, setSelectedTierFilter] = useState<'all' | 'upstream' | 'downstream'>('all');
+  const [selectedIndustryFilter, setSelectedIndustryFilter] = useState<string>('all');
+  const [selectedRelFilter, setSelectedRelFilter] = useState<string>('all');
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
   const [selectedNode, setSelectedNode] = useState<Business | null>(myBusiness);
+  const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
+  const [targetBizToConnect, setTargetBizToConnect] = useState<string>(businesses[1]?.id || '');
+  const [selectedRelationshipType, setSelectedRelationshipType] = useState<UniversalRelationshipType>('Strategic Partner ↔ Partner');
+  const [connectionCategory, setConnectionCategory] = useState('Cross-Border Technology & Service Synergy');
 
-  // Group and arrange businesses by supply tier
-  const { nodes, links, tiers } = useMemo(() => {
+  // Compute layout coordinates for nodes in a multi-radial orbital structure
+  const { nodes, links } = useMemo(() => {
     const businessMap = new Map<string, Business>(businesses.map(b => [b.id, b]));
-    
-    // Determine tier for each connected business
-    const getTier = (b: Business): number => {
-      if (b.id === myBusiness.id) return 3; // Center
-      if (b.roles.includes('Manufacturer')) return 0;
-      if (b.roles.includes('Super Wholesaler')) return 1;
-      if (b.roles.includes('Wholesaler') || b.roles.includes('Distributor')) return 2;
-      if (b.roles.includes('Retailer') || b.roles.includes('Service Provider')) return 4;
-      return 5;
-    };
 
-    // Collect all active nodes
+    // Connected nodes
     const activeNodeIds = new Set<string>();
     activeNodeIds.add(myBusiness.id);
-
-    relationships.forEach(rel => {
-      activeNodeIds.add(rel.sourceId);
-      activeNodeIds.add(rel.targetId);
+    relationships.forEach(r => {
+      activeNodeIds.add(r.sourceId);
+      activeNodeIds.add(r.targetId);
     });
 
-    // Also include any discovered businesses in the directory
-    businesses.forEach(b => {
-      if (b.id.startsWith('biz_ambala_led_hub') || b.id.startsWith('biz_haryana_lighting_corp')) {
-        activeNodeIds.add(b.id);
-      }
+    // Also include any directory businesses
+    businesses.forEach(b => activeNodeIds.add(b.id));
+
+    const otherBizList = Array.from(activeNodeIds)
+      .map(id => businessMap.get(id))
+      .filter((b): b is Business => Boolean(b && b.id !== myBusiness.id));
+
+    const centerX = 500;
+    const centerY = 450;
+    const graphNodes: NodeCoordinate[] = [];
+
+    // Center node (My Enterprise)
+    graphNodes.push({
+      id: myBusiness.id,
+      business: myBusiness,
+      x: centerX,
+      y: centerY,
+      angle: 0,
+      radius: 0,
+      sectorColor: '#3b82f6',
+      isMyBusiness: true,
     });
 
-    // Group businesses by tier
-    const tierBuckets: Record<number, Business[]> = {
-      0: [],
-      1: [],
-      2: [],
-      3: [myBusiness],
-      4: [],
-      5: [],
-    };
+    // Arrange other nodes in two orbital rings
+    const ring1Radius = 260;
+    const ring2Radius = 380;
+    const total = otherBizList.length;
 
-    activeNodeIds.forEach(id => {
-      const b = businessMap.get(id);
-      if (!b || b.id === myBusiness.id) return;
-      const t = getTier(b);
-      tierBuckets[t].push(b);
-    });
+    otherBizList.forEach((b, idx) => {
+      const isInnerRing = idx % 2 === 0;
+      const radius = isInnerRing ? ring1Radius : ring2Radius;
+      const angle = (idx / total) * 2 * Math.PI - Math.PI / 2;
+      const x = centerX + radius * Math.cos(angle);
+      const y = centerY + radius * Math.sin(angle);
+      const sector = SECTOR_COLORS[b.industry] || { stroke: '#94a3b8' };
 
-    // Compute coordinates
-    const graphNodes: GraphNode[] = [];
-    const tierHeights = [80, 220, 370, 530, 690, 820];
-    const width = 960;
-
-    Object.entries(tierBuckets).forEach(([tierStr, bizList]) => {
-      const tierNum = Number(tierStr);
-      const y = tierHeights[tierNum] || 400;
-      const count = bizList.length;
-
-      bizList.forEach((biz, index) => {
-        // Space nodes horizontally
-        let x = width / 2;
-        if (count > 1) {
-          const spacing = Math.min(260, (width - 160) / (count - 1));
-          const startX = (width - (count - 1) * spacing) / 2;
-          x = startX + index * spacing;
-        }
-
-        graphNodes.push({
-          id: biz.id,
-          business: biz,
-          tier: tierNum,
-          x,
-          y,
-          isMyBusiness: biz.id === myBusiness.id,
-        });
+      graphNodes.push({
+        id: b.id,
+        business: b,
+        x,
+        y,
+        angle,
+        radius,
+        sectorColor: sector.stroke,
+        isMyBusiness: false,
       });
     });
 
-    // Build connections
-    const graphLinks: Array<{
-      id: string;
-      source: GraphNode;
-      target: GraphNode;
-      label: string;
-      status: string;
-      isHighlighted: boolean;
-    }> = [];
-
+    // Map links
     const nodeCoordMap = new Map(graphNodes.map(n => [n.id, n]));
-
-    relationships.forEach(rel => {
-      const sourceNode = nodeCoordMap.get(rel.sourceId);
-      const targetNode = nodeCoordMap.get(rel.targetId);
-
-      if (sourceNode && targetNode) {
-        graphLinks.push({
-          id: rel.id,
+    const graphLinks = relationships
+      .map(r => {
+        const sourceNode = nodeCoordMap.get(r.sourceId);
+        const targetNode = nodeCoordMap.get(r.targetId);
+        if (!sourceNode || !targetNode) return null;
+        return {
+          id: r.id,
           source: sourceNode,
           target: targetNode,
-          label: rel.volumeMonthly,
-          status: rel.status,
-          isHighlighted:
-            hoveredNodeId === rel.sourceId ||
-            hoveredNodeId === rel.targetId ||
-            sourceNode.isMyBusiness ||
-            targetNode.isMyBusiness,
-        });
-      }
-    });
+          relationship: r,
+        };
+      })
+      .filter(Boolean);
 
-    return {
-      nodes: graphNodes,
-      links: graphLinks,
-      tiers: [
-        { level: 0, label: 'TIER 0 • RAW MANUFACTURERS & OPTO-PLANTS' },
-        { level: 1, label: 'TIER 1 • REGIONAL SUPER WHOLESALERS' },
-        { level: 2, label: 'TIER 2 • WHOLESALE DISTRIBUTORS & STOCKISTS' },
-        { level: 3, label: 'TIER 3 • YOUR ENTERPRISE (CENTRAL NODE)' },
-        { level: 4, label: 'TIER 4 • RETAILERS & CONTRACTORS' },
-        { level: 5, label: 'TIER 5 • LOCAL CONSUMERS & COMMERCE' },
-      ],
-    };
-  }, [businesses, relationships, myBusiness, hoveredNodeId]);
+    return { nodes: graphNodes, links: graphLinks };
+  }, [businesses, relationships, myBusiness]);
 
-  const getNodeBorderColor = (role: BusinessRole, isMine: boolean) => {
-    if (isMine) return 'border-amber-400 ring-4 ring-amber-300/40 shadow-xl bg-amber-50';
-    switch (role) {
-      case 'Manufacturer':
-        return 'border-rose-400 bg-rose-50/70 hover:border-rose-600';
-      case 'Super Wholesaler':
-        return 'border-indigo-400 bg-indigo-50/70 hover:border-indigo-600';
-      case 'Wholesaler':
-        return 'border-blue-400 bg-blue-50/70 hover:border-blue-600';
-      case 'Distributor':
-        return 'border-amber-400 bg-amber-50/70 hover:border-amber-600';
-      case 'Retailer':
-        return 'border-emerald-400 bg-emerald-50/70 hover:border-emerald-600';
-      case 'Service Provider':
-        return 'border-purple-400 bg-purple-50/70 hover:border-purple-600';
-      default:
-        return 'border-slate-300 bg-white hover:border-slate-500';
+  // Node filter check
+  const filteredNodes = nodes.filter(n => {
+    if (n.isMyBusiness) return true;
+    if (selectedIndustryFilter !== 'all' && n.business.industry !== selectedIndustryFilter) {
+      return false;
     }
-  };
+    return true;
+  });
 
-  const getNodeRoleBadge = (role: BusinessRole) => {
-    switch (role) {
-      case 'Manufacturer':
-        return 'bg-rose-100 text-rose-800';
-      case 'Super Wholesaler':
-        return 'bg-indigo-100 text-indigo-800';
-      case 'Wholesaler':
-        return 'bg-blue-100 text-blue-800';
-      case 'Distributor':
-        return 'bg-amber-100 text-amber-800';
-      case 'Retailer':
-        return 'bg-emerald-100 text-emerald-800';
-      case 'Service Provider':
-        return 'bg-purple-100 text-purple-800';
-      default:
-        return 'bg-slate-100 text-slate-800';
+  const nodeMap = new Map(filteredNodes.map(n => [n.id, n]));
+
+  // Link filter check
+  const filteredLinks = links.filter(l => {
+    if (!l) return false;
+    if (!nodeMap.has(l.source.id) || !nodeMap.has(l.target.id)) return false;
+    if (selectedRelFilter !== 'all' && l.relationship.relationshipType !== selectedRelFilter) {
+      return false;
     }
+    return true;
+  });
+
+  // Selected Business Relationship details
+  const activeRelationshipWithSelected = useMemo(() => {
+    if (!selectedNode || selectedNode.id === myBusiness.id) return null;
+    return relationships.find(
+      r =>
+        (r.sourceId === myBusiness.id && r.targetId === selectedNode.id) ||
+        (r.sourceId === selectedNode.id && r.targetId === myBusiness.id)
+    );
+  }, [selectedNode, myBusiness, relationships]);
+
+  const handleConnectSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const target = businesses.find(b => b.id === targetBizToConnect);
+    if (!target) return;
+    connectBusinesses(target, selectedRelationshipType, connectionCategory);
+    setIsConnectModalOpen(false);
   };
 
   return (
-    <div className="space-y-4">
-      {/* Network Header & Controls */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-white p-4 rounded-xl border border-slate-200 shadow-subtle">
-        <div>
-          <div className="flex items-center gap-2">
-            <Layers className="w-5 h-5 text-indigo-600" />
-            <h3 className="text-base font-bold text-slate-900">
-              Interactive Supply-Chain Network
-            </h3>
-            <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-              Live Topology Graph
-            </span>
+    <div className="flex flex-col h-[calc(100vh-65px)] bg-slate-950 text-slate-100 overflow-hidden relative select-none">
+      {/* Top Universal Filter Bar */}
+      <div className="bg-slate-900/95 border-b border-slate-800 p-4 flex flex-wrap items-center justify-between gap-4 z-10 backdrop-blur-md">
+        <div className="flex items-center gap-3">
+          <div className="p-2 rounded-xl bg-gradient-to-tr from-indigo-500 to-cyan-500 text-white shadow-md">
+            <Globe className="w-5 h-5" />
           </div>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Real-time visualization of upstream manufacturers, wholesalers, your business, and downstream buyers.
-          </p>
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="text-base font-bold text-white tracking-tight">Universal Ecosystem Network</h2>
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                Multi-Sector Mesh
+              </span>
+            </div>
+            <p className="text-xs text-slate-400">
+              Interactive relationship visualizer connecting tech, healthcare, manufacturing, creative, logistics, and consulting worldwide.
+            </p>
+          </div>
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* Tier filter */}
-          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg text-xs font-medium text-slate-600">
-            <button
-              onClick={() => setSelectedTierFilter('all')}
-              className={`px-2.5 py-1 rounded-md transition-all ${
-                selectedTierFilter === 'all'
-                  ? 'bg-white shadow-xs text-slate-900 font-semibold'
-                  : 'hover:text-slate-900'
-              }`}
+        {/* Filter Controls */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          {/* Industry Filter */}
+          <div className="flex items-center gap-1.5 bg-slate-800/80 px-3 py-1.5 rounded-xl border border-slate-700 text-xs">
+            <Filter className="w-3.5 h-3.5 text-slate-400" />
+            <select
+              value={selectedIndustryFilter}
+              onChange={e => setSelectedIndustryFilter(e.target.value)}
+              className="bg-transparent border-none text-xs text-slate-200 focus:outline-none cursor-pointer font-medium"
             >
-              All Tiers
-            </button>
-            <button
-              onClick={() => setSelectedTierFilter('upstream')}
-              className={`px-2.5 py-1 rounded-md transition-all ${
-                selectedTierFilter === 'upstream'
-                  ? 'bg-white shadow-xs text-slate-900 font-semibold'
-                  : 'hover:text-slate-900'
-              }`}
+              <option value="all">All Industries ({businesses.length})</option>
+              {Object.keys(SECTOR_COLORS).map(ind => (
+                <option key={ind} value={ind}>
+                  {ind}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Relationship Filter */}
+          <div className="flex items-center gap-1.5 bg-slate-800/80 px-3 py-1.5 rounded-xl border border-slate-700 text-xs">
+            <Handshake className="w-3.5 h-3.5 text-slate-400" />
+            <select
+              value={selectedRelFilter}
+              onChange={e => setSelectedRelFilter(e.target.value)}
+              className="bg-transparent border-none text-xs text-slate-200 focus:outline-none cursor-pointer font-medium"
             >
-              Upstream (Suppliers)
-            </button>
-            <button
-              onClick={() => setSelectedTierFilter('downstream')}
-              className={`px-2.5 py-1 rounded-md transition-all ${
-                selectedTierFilter === 'downstream'
-                  ? 'bg-white shadow-xs text-slate-900 font-semibold'
-                  : 'hover:text-slate-900'
-              }`}
-            >
-              Downstream (Buyers)
-            </button>
+              <option value="all">All Relationship Types</option>
+              {UNIVERSAL_RELATIONSHIP_TYPES.map(rel => (
+                <option key={rel.id} value={rel.id}>
+                  {rel.label}
+                </option>
+              ))}
+            </select>
           </div>
 
           {/* Zoom controls */}
-          <div className="flex items-center gap-1 border border-slate-200 rounded-lg p-1 bg-white">
+          <div className="flex items-center gap-1 bg-slate-800/80 p-1 rounded-xl border border-slate-700">
             <button
-              onClick={() => setZoomLevel(prev => Math.max(0.7, prev - 0.1))}
-              className="p-1 rounded hover:bg-slate-100 text-slate-600"
+              onClick={() => setZoomLevel(prev => Math.max(0.6, prev - 0.1))}
+              className="p-1.5 hover:bg-slate-700 rounded-lg text-slate-400 hover:text-white"
               title="Zoom out"
             >
-              <ZoomOut className="w-4 h-4" />
+              <ZoomOut className="w-3.5 h-3.5" />
             </button>
-            <span className="text-xs font-mono font-medium px-1 text-slate-700">
-              {Math.round(zoomLevel * 100)}%
-            </span>
+            <span className="text-[11px] font-mono px-1 text-slate-400">{Math.round(zoomLevel * 100)}%</span>
             <button
               onClick={() => setZoomLevel(prev => Math.min(1.4, prev + 0.1))}
-              className="p-1 rounded hover:bg-slate-100 text-slate-600"
+              className="p-1.5 hover:bg-slate-700 rounded-lg text-slate-400 hover:text-white"
               title="Zoom in"
             >
-              <ZoomIn className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => setZoomLevel(1)}
-              className="p-1 rounded hover:bg-slate-100 text-slate-600"
-              title="Reset view"
-            >
-              <Maximize2 className="w-4 h-4" />
+              <ZoomIn className="w-3.5 h-3.5" />
             </button>
           </div>
 
+          {/* Connect Enterprise CTA */}
           <button
-            onClick={() => setDashboardView('find_suppliers')}
-            className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-xs flex items-center gap-1.5 transition-all"
+            onClick={() => setIsConnectModalOpen(true)}
+            className="px-3.5 py-1.5 bg-gradient-to-r from-indigo-500 to-cyan-500 hover:from-indigo-600 hover:to-cyan-600 text-white font-semibold rounded-xl text-xs shadow-md transition-all flex items-center gap-1.5"
           >
             <PlusCircle className="w-3.5 h-3.5" />
-            Find New Supplier
+            Form New Connection
           </button>
         </div>
       </div>
 
-      {/* Main Canvas / Visual Container */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
-        {/* Visual Graph Viewport (3 cols) */}
-        <div className="lg:col-span-3 bg-slate-900/95 rounded-2xl border border-slate-800 p-4 relative overflow-hidden min-h-[720px] shadow-2xl bg-grid-slate flex flex-col justify-between">
-          {/* Top Banner Guide */}
-          <div className="flex items-center justify-between text-xs text-slate-400 bg-slate-800/80 backdrop-blur px-4 py-2 rounded-xl border border-slate-700/60 z-10">
-            <span className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-              Interactive Multi-Tier Supply Flow
-            </span>
-            <span className="hidden sm:inline">Click any node to view relationship details and counterparty profile</span>
-          </div>
+      {/* Main Canvas & Detail Sidebar */}
+      <div className="flex-1 flex relative overflow-hidden">
+        {/* Interactive SVG Network Canvas */}
+        <div className="flex-1 h-full overflow-auto flex items-center justify-center p-8 bg-[radial-gradient(#1e293b_1px,transparent_1px)] [background-size:24px_24px]">
+          <div
+            style={{
+              transform: `scale(${zoomLevel})`,
+              transformOrigin: 'center center',
+              transition: 'transform 0.15s ease-out',
+            }}
+            className="w-[1000px] h-[900px] relative shrink-0"
+          >
+            <svg className="w-full h-full absolute inset-0 pointer-events-none">
+              <defs>
+                <linearGradient id="primaryLinkGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.8" />
+                  <stop offset="100%" stopColor="#06b6d4" stopOpacity="0.8" />
+                </linearGradient>
+                <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+                  <feGaussianBlur stdDeviation="3" result="blur" />
+                  <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                </filter>
+              </defs>
 
-          {/* SVG Canvas Area */}
-          <div className="relative w-full h-[700px] overflow-auto flex items-center justify-center my-2">
-            <div
-              style={{
-                transform: `scale(${zoomLevel})`,
-                transformOrigin: 'center top',
-                transition: 'transform 0.2s ease-out',
-                width: 960,
-                height: 880,
-                position: 'relative',
-              }}
-            >
-              {/* Tier Background Strips */}
-              {tiers.map((t, idx) => (
-                <div
-                  key={t.level}
-                  style={{ top: `${idx * 145 + 10}px` }}
-                  className="absolute left-0 right-0 h-28 border-b border-dashed border-slate-800/60 flex items-start px-2 pointer-events-none"
-                >
-                  <span className="text-[10px] font-mono tracking-wider text-slate-500 font-semibold uppercase">
-                    {t.label}
-                  </span>
-                </div>
-              ))}
+              {/* Orbital guide rings */}
+              <circle cx="500" cy="450" r="260" fill="none" stroke="#334155" strokeWidth="1" strokeDasharray="4 6" opacity="0.4" />
+              <circle cx="500" cy="450" r="380" fill="none" stroke="#334155" strokeWidth="1" strokeDasharray="4 6" opacity="0.3" />
 
-              {/* SVG Connecting Links */}
-              <svg className="absolute inset-0 w-full h-full pointer-events-none z-0">
-                <defs>
-                  <linearGradient id="flowGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-                    <stop offset="0%" stopColor="#818cf8" stopOpacity="0.8" />
-                    <stop offset="100%" stopColor="#34d399" stopOpacity="0.8" />
-                  </linearGradient>
-                  <marker
-                    id="arrowhead"
-                    markerWidth="8"
-                    markerHeight="8"
-                    refX="7"
-                    refY="3.5"
-                    orient="auto"
-                  >
-                    <polygon points="0 0, 8 3.5, 0 7" fill="#6366f1" />
-                  </marker>
-                </defs>
+              {/* Dynamic Connection Beziers */}
+              {filteredLinks.map((link, idx) => {
+                if (!link) return null;
+                const isHovered = hoveredNodeId === link.source.id || hoveredNodeId === link.target.id;
+                const isSelected = selectedNode?.id === link.source.id || selectedNode?.id === link.target.id;
 
-                {links.map(link => {
-                  const x1 = link.source.x;
-                  const y1 = link.source.y + 45;
-                  const x2 = link.target.x;
-                  const y2 = link.target.y - 10;
-                  const midY = (y1 + y2) / 2;
-
-                  // Cubic bezier curve
-                  const pathData = `M ${x1} ${y1} C ${x1} ${midY}, ${x2} ${midY}, ${x2} ${y2}`;
-
-                  return (
-                    <g key={link.id}>
-                      {/* Glow background line */}
-                      <path
-                        d={pathData}
-                        fill="none"
-                        stroke={link.isHighlighted ? '#6366f1' : '#334155'}
-                        strokeWidth={link.isHighlighted ? '2.5' : '1.5'}
-                        strokeOpacity={link.isHighlighted ? 0.9 : 0.4}
-                      />
-                      {/* Flow animation line */}
-                      <path
-                        d={pathData}
-                        fill="none"
-                        stroke="url(#flowGrad)"
-                        strokeWidth="2"
-                        className="animate-flow"
-                        markerEnd="url(#arrowhead)"
-                      />
-                    </g>
-                  );
-                })}
-              </svg>
-
-              {/* Render Nodes */}
-              {nodes.map(node => {
-                const isSelected = selectedNode?.id === node.id;
-                const isHovered = hoveredNodeId === node.id;
-
-                // Hide node if tier filter active
-                if (selectedTierFilter === 'upstream' && node.tier > 3) return null;
-                if (selectedTierFilter === 'downstream' && node.tier < 3) return null;
+                // Control point for smooth curved bezier
+                const midX = (link.source.x + link.target.x) / 2;
+                const midY = (link.source.y + link.target.y) / 2;
+                const dx = link.target.x - link.source.x;
+                const dy = link.target.y - link.source.y;
+                const normalX = -dy * 0.15;
+                const normalY = dx * 0.15;
+                const cx = midX + normalX;
+                const cy = midY + normalY;
 
                 return (
-                  <div
-                    key={node.id}
-                    onClick={() => {
-                      setSelectedNode(node.business);
-                    }}
-                    onMouseEnter={() => setHoveredNodeId(node.id)}
-                    onMouseLeave={() => setHoveredNodeId(null)}
-                    style={{
-                      left: `${node.x - 110}px`,
-                      top: `${node.y}px`,
-                      width: '220px',
-                    }}
-                    className={`absolute z-10 cursor-pointer rounded-xl p-3 border-2 transition-all duration-200 transform hover:-translate-y-1 ${
-                      getNodeBorderColor(node.business.primaryRole, node.isMyBusiness)
-                    } ${
-                      isSelected
-                        ? 'ring-2 ring-indigo-400 shadow-2xl scale-105'
-                        : 'shadow-md'
-                    }`}
-                  >
-                    {/* Node Header */}
-                    <div className="flex items-start justify-between gap-1 mb-1">
-                      <span
-                        className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider ${getNodeRoleBadge(
-                          node.business.primaryRole
-                        )}`}
-                      >
-                        {node.business.primaryRole}
-                      </span>
-
-                      {node.isMyBusiness ? (
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-500 text-white shadow-xs">
-                          ⭐ YOU
-                        </span>
-                      ) : (
-                        <div className="flex items-center gap-0.5 text-amber-500 text-[11px] font-bold">
-                          <Star className="w-3 h-3 fill-amber-400" />
-                          <span>{node.business.rating.toFixed(1)}</span>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Node Title & City */}
-                    <h4 className="text-xs font-bold text-slate-900 leading-snug line-clamp-1">
-                      {node.business.name}
-                    </h4>
-
-                    <div className="flex items-center justify-between text-[11px] text-slate-500 mt-1">
-                      <span>{node.business.location.city}</span>
-                      {node.business.location.distanceKm !== undefined && (
-                        <span className="text-emerald-700 font-semibold">
-                          {node.business.location.distanceKm === 0 ? 'Base' : `${node.business.location.distanceKm} km`}
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Quick view button inside node */}
-                    <button
-                      onClick={e => {
-                        e.stopPropagation();
-                        setInspectingBusiness(node.business);
-                      }}
-                      className="mt-2 w-full py-1 text-[10px] font-semibold text-slate-700 hover:text-indigo-600 bg-slate-100 hover:bg-slate-200 rounded transition-colors flex items-center justify-center gap-1"
-                    >
-                      <ExternalLink className="w-3 h-3" />
-                      View Profile
-                    </button>
-                  </div>
+                  <g key={`link_${idx}`} className="transition-all duration-300">
+                    <path
+                      d={`M ${link.source.x} ${link.source.y} Q ${cx} ${cy} ${link.target.x} ${link.target.y}`}
+                      fill="none"
+                      stroke={isSelected ? '#38bdf8' : isHovered ? '#60a5fa' : link.source.sectorColor}
+                      strokeWidth={isSelected ? 3.5 : isHovered ? 2.5 : 1.5}
+                      strokeOpacity={isSelected ? 0.95 : isHovered ? 0.8 : 0.4}
+                      strokeDasharray={link.relationship.status === 'collaborating' ? '6 4' : 'none'}
+                      filter={isSelected ? 'url(#glow)' : undefined}
+                    />
+                  </g>
                 );
               })}
-            </div>
-          </div>
+            </svg>
 
-          {/* Bottom Legend */}
-          <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400 bg-slate-800/90 p-3 rounded-xl border border-slate-700">
-            <div className="flex items-center gap-3 flex-wrap">
-              <span className="font-semibold text-white">Legend:</span>
-              <span className="flex items-center gap-1">
-                <span className="w-2.5 h-2.5 rounded-full bg-rose-500" /> Manufacturer
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="w-2.5 h-2.5 rounded-full bg-indigo-500" /> Super Wholesaler
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="w-2.5 h-2.5 rounded-full bg-blue-500" /> Wholesaler / Dist.
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="w-2.5 h-2.5 rounded-full bg-amber-400 ring-2 ring-amber-300" /> My Business
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" /> Retail Buyer
-              </span>
-            </div>
-            <span className="text-[11px] text-indigo-300">
-              ⚡ Animated pulses reflect active procurement paths
-            </span>
+            {/* Nodes */}
+            {filteredNodes.map(node => {
+              const isCenter = node.isMyBusiness;
+              const isSelected = selectedNode?.id === node.id;
+              const isHovered = hoveredNodeId === node.id;
+              const country = GLOBAL_COUNTRIES.find(c => c.code === node.business.location.countryCode) || GLOBAL_COUNTRIES[0];
+              const sector = SECTOR_COLORS[node.business.industry] || { bg: 'bg-slate-800', border: 'border-slate-600', text: 'text-slate-300', stroke: '#94a3b8' };
+
+              return (
+                <div
+                  key={node.id}
+                  style={{
+                    left: `${node.x}px`,
+                    top: `${node.y}px`,
+                    transform: 'translate(-50%, -50%)',
+                  }}
+                  onMouseEnter={() => setHoveredNodeId(node.id)}
+                  onMouseLeave={() => setHoveredNodeId(null)}
+                  onClick={() => setSelectedNode(node.business)}
+                  className={`absolute cursor-pointer transition-all duration-300 group ${isCenter ? 'z-30' : isSelected ? 'z-20 scale-110' : 'z-10 hover:scale-105'
+                    }`}
+                >
+                  {isCenter ? (
+                    // Center Hub Node (Your Business)
+                    <div className="relative flex flex-col items-center">
+                      <div className="w-20 h-20 rounded-2xl bg-gradient-to-tr from-indigo-600 via-blue-600 to-cyan-400 p-0.5 shadow-2xl shadow-indigo-500/50 flex items-center justify-center animate-pulse">
+                        <div className="w-full h-full bg-slate-950 rounded-2xl flex flex-col items-center justify-center p-2 text-center">
+                          <Building2 className="w-6 h-6 text-cyan-400" />
+                          <span className="text-[9px] font-black text-white mt-1 leading-tight line-clamp-1">
+                            {node.business.name.split(' ')[0]}
+                          </span>
+                          <span className="text-[8px] font-bold text-cyan-400 uppercase">You (Hub)</span>
+                        </div>
+                      </div>
+                      <div className="mt-2 bg-slate-900/90 border border-cyan-500/50 px-2.5 py-1 rounded-full text-[10px] font-bold text-white shadow-lg whitespace-nowrap">
+                        {node.business.name}
+                      </div>
+                    </div>
+                  ) : (
+                    // Satellite Enterprise Node
+                    <div className="relative flex flex-col items-center">
+                      <div
+                        className={`w-14 h-14 rounded-2xl border-2 flex items-center justify-center p-1 transition-all shadow-lg ${sector.bg} ${isSelected
+                          ? 'border-white ring-4 ring-cyan-400/50 shadow-cyan-500/40'
+                          : isHovered
+                            ? 'border-cyan-400 shadow-cyan-500/20'
+                            : sector.border
+                          }`}
+                      >
+                        <div className="flex flex-col items-center justify-center text-center">
+                          <span className="text-sm">{country.flag}</span>
+                          <span className="text-[9px] font-bold text-white leading-tight line-clamp-1 px-1">
+                            {node.business.name.split(' ')[0]}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Floating pill badge */}
+                      <div
+                        className={`mt-1.5 px-2 py-0.5 rounded-md text-[9px] font-semibold tracking-tight whitespace-nowrap max-w-[140px] truncate shadow-md ${isSelected
+                          ? 'bg-cyan-500 text-slate-950 font-bold'
+                          : 'bg-slate-900/90 text-slate-300 border border-slate-700'
+                          }`}
+                      >
+                        {node.business.name}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
 
-        {/* Selected Node Inspector Drawer (1 col) */}
-        <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-card flex flex-col justify-between space-y-4">
-          {selectedNode ? (
+        {/* Selected Entity Inspector Sidebar */}
+        {selectedNode && (
+          <aside className="w-96 bg-slate-900 border-l border-slate-800 flex flex-col justify-between shrink-0 h-full p-5 overflow-y-auto z-20 shadow-2xl">
             <div className="space-y-4">
-              <div>
-                <span className="text-[10px] uppercase font-bold tracking-wider text-indigo-600 block mb-1">
-                  Selected Entity Inspector
-                </span>
-                <div className="flex items-start justify-between gap-2">
-                  <h4 className="text-base font-bold text-slate-900 leading-tight">
-                    {selectedNode.name}
-                  </h4>
-                  {selectedNode.verified && (
-                    <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                  )}
-                </div>
-                <p className="text-xs text-slate-500 mt-1">
-                  {selectedNode.location.area}, {selectedNode.location.city}
-                </p>
-              </div>
-
-              {/* Roles */}
-              <div>
-                <span className="text-[11px] font-semibold text-slate-600 block mb-1">Roles:</span>
-                <div className="flex flex-wrap gap-1">
-                  {selectedNode.roles.map(r => (
-                    <span
-                      key={r}
-                      className="px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-700"
-                    >
-                      {r}
-                    </span>
-                  ))}
-                </div>
-              </div>
-
-              {/* Metrics */}
-              <div className="grid grid-cols-2 gap-2 bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs">
+              {/* Header */}
+              <div className="flex items-start justify-between">
                 <div>
-                  <span className="text-slate-500 block text-[10px]">Rating</span>
-                  <strong className="text-slate-900 font-bold flex items-center gap-1 mt-0.5">
-                    <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
-                    {selectedNode.rating.toFixed(1)} ({selectedNode.reviewCount})
-                  </strong>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-cyan-400">
+                    {selectedNode.id === myBusiness.id ? 'Your Enterprise' : 'Ecosystem Partner'}
+                  </span>
+                  <h3 className="text-base font-black text-white leading-tight mt-0.5">{selectedNode.name}</h3>
+                  <p className="text-xs text-slate-400 mt-0.5">{selectedNode.tagline || selectedNode.description}</p>
                 </div>
-                <div>
-                  <span className="text-slate-500 block text-[10px]">Trust Score</span>
-                  <strong className="text-emerald-600 font-bold text-sm block mt-0.5">
-                    {selectedNode.trustScore}/100
-                  </strong>
-                </div>
-                <div>
-                  <span className="text-slate-500 block text-[10px]">Suppliers</span>
-                  <strong className="text-slate-800 font-semibold block mt-0.5">
-                    {selectedNode.totalSuppliersCount} connected
-                  </strong>
-                </div>
-                <div>
-                  <span className="text-slate-500 block text-[10px]">Buyers</span>
-                  <strong className="text-slate-800 font-semibold block mt-0.5">
-                    {selectedNode.totalCustomersCount} active
-                  </strong>
-                </div>
-              </div>
-
-              {/* Relationship summary */}
-              <div className="text-xs space-y-2">
-                <span className="font-semibold text-slate-700 block">Supply Chain Connection:</span>
-                {selectedNode.id === myBusiness.id ? (
-                  <p className="text-slate-600 leading-relaxed bg-amber-50/70 p-3 rounded-lg border border-amber-200">
-                    This is your registered hub in Ambala Cantt. You purchase from <strong>2 wholesalers</strong> and supply <strong>2 retail buyers & 142 consumers</strong>.
-                  </p>
-                ) : (
-                  <p className="text-slate-600 leading-relaxed bg-slate-50 p-3 rounded-lg border border-slate-200">
-                    Connected in the active regional network. Supplies {selectedNode.categories.slice(0, 2).join(', ')} with high fulfillment reliability.
-                  </p>
+                {selectedNode.id !== myBusiness.id && (
+                  <button
+                    onClick={() => setSelectedNode(myBusiness)}
+                    className="p-1 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
                 )}
               </div>
 
-              <div className="pt-2 space-y-2">
-                <button
-                  onClick={() => setInspectingBusiness(selectedNode)}
-                  className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-sm transition-all flex items-center justify-center gap-1.5"
-                >
-                  <ExternalLink className="w-3.5 h-3.5" />
-                  Open Full Business Profile
-                </button>
+              {/* Key Attributes */}
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="p-2.5 bg-slate-800/80 rounded-xl border border-slate-700/60">
+                  <span className="text-[10px] text-slate-400 font-medium">Industry Domain</span>
+                  <p className="font-bold text-white truncate mt-0.5">{selectedNode.industry}</p>
+                </div>
+                <div className="p-2.5 bg-slate-800/80 rounded-xl border border-slate-700/60">
+                  <span className="text-[10px] text-slate-400 font-medium">Business Model</span>
+                  <p className="font-bold text-cyan-400 truncate mt-0.5">{selectedNode.primaryBusinessModel}</p>
+                </div>
+                <div className="p-2.5 bg-slate-800/80 rounded-xl border border-slate-700/60">
+                  <span className="text-[10px] text-slate-400 font-medium">Location</span>
+                  <p className="font-bold text-white truncate mt-0.5">
+                    {selectedNode.location.city}, {selectedNode.location.country}
+                  </p>
+                </div>
+                <div className="p-2.5 bg-slate-800/80 rounded-xl border border-slate-700/60">
+                  <span className="text-[10px] text-slate-400 font-medium">Network Trust</span>
+                  <p className="font-bold text-emerald-400 mt-0.5">
+                    ★ {selectedNode.rating} ({selectedNode.trustScore}/100)
+                  </p>
+                </div>
+              </div>
+
+              {/* Relationship Status Section */}
+              {activeRelationshipWithSelected ? (
+                <div className="p-3.5 bg-indigo-950/40 rounded-xl border border-indigo-500/40 space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-bold text-indigo-300 flex items-center gap-1.5">
+                      <Handshake className="w-4 h-4 text-cyan-400" />
+                      {activeRelationshipWithSelected.relationshipType || 'Connected Partner'}
+                    </span>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                      Active
+                    </span>
+                  </div>
+
+                  <p className="text-xs text-slate-300">{activeRelationshipWithSelected.category}</p>
+
+                  <div className="text-[11px] text-slate-400 space-y-1 pt-1 border-t border-indigo-900/60">
+                    <div className="flex justify-between">
+                      <span>Volume / Terms:</span>
+                      <span className="font-mono text-slate-200">{activeRelationshipWithSelected.volumeMonthly || 'Synergy'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Commercial Mode:</span>
+                      <span className="text-indigo-300 font-medium capitalize">
+                        {activeRelationshipWithSelected.commercialNature?.replace('_', ' ') || 'Professional Network'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {activeRelationshipWithSelected.sharedProjects && (
+                    <div className="pt-2 border-t border-indigo-900/60">
+                      <span className="text-[10px] font-bold uppercase text-slate-400">Collaborative Projects:</span>
+                      <ul className="mt-1 space-y-1 text-xs text-slate-200">
+                        {activeRelationshipWithSelected.sharedProjects.map((p, i) => (
+                          <li key={i} className="flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
+                            {p}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              ) : selectedNode.id !== myBusiness.id ? (
+                <div className="p-3 bg-slate-800/60 rounded-xl border border-dashed border-slate-700 text-center space-y-2">
+                  <p className="text-xs text-slate-400">No active relationship formalized yet with this enterprise.</p>
+                  <button
+                    onClick={() => {
+                      setTargetBizToConnect(selectedNode.id);
+                      setIsConnectModalOpen(true);
+                    }}
+                    className="w-full py-2 bg-gradient-to-r from-indigo-500 to-cyan-500 hover:from-indigo-600 hover:to-cyan-600 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-1.5"
+                  >
+                    <Handshake className="w-3.5 h-3.5" />
+                    Connect & Partner
+                  </button>
+                </div>
+              ) : null}
+
+              {/* Offerings Highlights */}
+              <div className="space-y-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  Featured Offerings ({selectedNode.offerings?.length || 0})
+                </span>
+                <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                  {selectedNode.offerings && selectedNode.offerings.length > 0 ? (
+                    selectedNode.offerings.map(off => (
+                      <div
+                        key={off.id}
+                        className="p-2 bg-slate-800/80 rounded-lg border border-slate-700/50 flex items-center justify-between text-xs"
+                      >
+                        <div className="min-w-0 pr-2">
+                          <p className="font-bold text-slate-200 truncate">{off.name}</p>
+                          <span className="text-[10px] text-slate-400 capitalize">
+                            {off.type} • {off.pricingModel.replace('_', ' ')}
+                          </span>
+                        </div>
+                        <span className="font-mono text-cyan-300 font-bold shrink-0">
+                          {off.currency} {off.price.toLocaleString()}
+                        </span>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-xs text-slate-500 italic">No catalogue listings published yet.</p>
+                  )}
+                </div>
               </div>
             </div>
-          ) : (
-            <div className="text-center py-12 text-slate-400">
-              <Info className="w-8 h-8 mx-auto mb-2 text-slate-300" />
-              <p className="text-xs">Click any node in the graph to inspect relationships</p>
-            </div>
-          )}
 
-          {/* Network Resilience Score */}
-          <div className="p-3.5 rounded-xl bg-slate-900 text-white text-xs space-y-1.5">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] text-slate-300 font-medium">Supply Redundancy</span>
-              <span className="text-emerald-400 font-bold">96% High</span>
+            {/* Bottom Actions */}
+            <div className="pt-4 border-t border-slate-800 space-y-2">
+              <button
+                onClick={() => setInspectingBusiness(selectedNode)}
+                className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 border border-slate-700 shadow-xs"
+              >
+                <ExternalLink className="w-3.5 h-3.5 text-cyan-400" />
+                View Full Universal Profile
+              </button>
             </div>
-            <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
-              <div className="h-full bg-emerald-400 w-[96%]" />
+          </aside>
+        )}
+      </div>
+
+      {/* Connection Builder Modal */}
+      {isConnectModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <Handshake className="w-5 h-5 text-cyan-400" />
+                <h3 className="text-base font-bold text-white">Form Universal Business Relationship</h3>
+              </div>
+              <button onClick={() => setIsConnectModalOpen(false)} className="text-slate-400 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
             </div>
-            <p className="text-[10px] text-slate-400 mt-1">
-              Multi-tier linkage ensures zero downtime if any single supplier faces stock shortage.
-            </p>
+
+            <form onSubmit={handleConnectSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">Target Enterprise</label>
+                <select
+                  value={targetBizToConnect}
+                  onChange={e => setTargetBizToConnect(e.target.value)}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                >
+                  {businesses
+                    .filter(b => b.id !== myBusiness.id)
+                    .map(b => (
+                      <option key={b.id} value={b.id}>
+                        {b.name} ({b.industry} — {b.location.city}, {b.location.country})
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">Relationship Type</label>
+                <select
+                  value={selectedRelationshipType}
+                  onChange={e => setSelectedRelationshipType(e.target.value as UniversalRelationshipType)}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                >
+                  {UNIVERSAL_RELATIONSHIP_TYPES.map(rel => (
+                    <option key={rel.id} value={rel.id}>
+                      {rel.label} — {rel.description}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">Engagement Description / Scope</label>
+                <input
+                  type="text"
+                  value={connectionCategory}
+                  onChange={e => setConnectionCategory(e.target.value)}
+                  placeholder="e.g. Cross-border Cloud Infrastructure & Strategic Marketing Retainer"
+                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                />
+              </div>
+
+              <div className="p-3 bg-slate-800/50 rounded-xl border border-slate-700/60 text-xs text-slate-400">
+                <p className="font-semibold text-slate-300">Universal Network Principle:</p>
+                <p className="mt-0.5">
+                  Connecting establishes a professional link on the graph. Commercial contracts, milestones, and transactions remain independent and can be formalized in the Deals Ledger.
+                </p>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsConnectModalOpen(false)}
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-gradient-to-r from-indigo-500 to-cyan-500 hover:from-indigo-600 hover:to-cyan-600 text-white rounded-xl text-xs font-bold shadow-md"
+                >
+                  Establish Connection
+                </button>
+              </div>
+            </form>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

@@ -13,71 +13,75 @@ import {
   Mail,
   Globe,
   Package,
+  Wrench,
   Layers,
-  ArrowRight,
-  TrendingUp,
-  Clock,
-  Send,
-  Navigation,
+  Award,
+  Briefcase,
+  Handshake,
   ExternalLink,
   Tag,
-  UserCheck,
   Receipt,
-  Share2,
+  Navigation,
+  Send,
+  Sparkles,
 } from 'lucide-react';
-import { BusinessRole } from '@/types';
+import { GLOBAL_COUNTRIES, UNIVERSAL_RELATIONSHIP_TYPES, formatCurrencyAmount } from '@/data/taxonomy';
+import { UniversalRelationshipType } from '@/types';
 
 export function BusinessProfileModal() {
   const {
     inspectingBusiness,
     setInspectingBusiness,
     myBusiness,
-    addSupplierToNetwork,
-    addCustomerToNetwork,
+    connectBusinesses,
     relationships,
     showToast,
     setIsAddTransactionModalOpen,
     setPrefilledTxBusiness,
   } = useBizLink();
 
-  const [activeTab, setActiveTab] = useState<'about' | 'products' | 'network' | 'reviews'>('about');
+  const [activeTab, setActiveTab] = useState<'about' | 'offerings' | 'capabilities' | 'credentials' | 'network'>('about');
   const [inquiryText, setInquiryText] = useState('');
   const [isInquirySent, setIsInquirySent] = useState(false);
+  const [selectedRelType, setSelectedRelType] = useState<UniversalRelationshipType>('Strategic Partner ↔ Partner');
 
   if (!inspectingBusiness) return null;
 
   const isMyBusiness = inspectingBusiness.id === myBusiness.id;
-  const isAlreadySupplier = relationships.some(
-    r => r.sourceId === inspectingBusiness.id && r.targetId === myBusiness.id
+  const existingRel = relationships.find(
+    r =>
+      (r.sourceId === myBusiness.id && r.targetId === inspectingBusiness.id) ||
+      (r.sourceId === inspectingBusiness.id && r.targetId === myBusiness.id)
   );
+
+  const country = GLOBAL_COUNTRIES.find(c => c.code === inspectingBusiness.location.countryCode) || GLOBAL_COUNTRIES[0];
 
   const handleSendInquiry = (e: React.FormEvent) => {
     e.preventDefault();
     if (!inquiryText.trim()) return;
     setIsInquirySent(true);
-    showToast('Inquiry Dispatched', `Inquiry sent to ${inspectingBusiness.name}. Response expected shortly.`, 'success');
+    showToast('Inquiry Dispatched', `Direct message sent to ${inspectingBusiness.name}. Response expected shortly.`, 'success');
     setTimeout(() => {
       setInquiryText('');
       setIsInquirySent(false);
     }, 2500);
   };
 
-  const handleOpenKhata = () => {
+  const handleOpenDeals = () => {
     setPrefilledTxBusiness(inspectingBusiness);
     setIsAddTransactionModalOpen(true);
     setInspectingBusiness(null);
   };
 
   const mapsNavUrl = inspectingBusiness.directionsUrl || `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(inspectingBusiness.name + ' ' + inspectingBusiness.location.city)}`;
-  const googleMapsUrl = inspectingBusiness.googleMapsUrl || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(inspectingBusiness.name + ' ' + inspectingBusiness.location.city)}`;
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/70 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 animate-fade-in">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/75 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 animate-in fade-in duration-150">
       <div className="bg-white w-full max-w-4xl rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[92vh]">
-        {/* Modal Header Banner with Real Photo */}
-        <div className="relative bg-slate-900 text-white overflow-hidden">
+        {/* Header Hero Banner */}
+        <div className="relative bg-slate-950 text-white overflow-hidden shrink-0">
           {inspectingBusiness.imageUrl && (
-            <div className="absolute inset-0 opacity-30 mix-blend-overlay">
+            <div className="absolute inset-0 opacity-25 mix-blend-overlay">
               <img
                 src={inspectingBusiness.imageUrl}
                 alt={inspectingBusiness.name}
@@ -89,122 +93,97 @@ export function BusinessProfileModal() {
           <div className="relative p-6 bg-gradient-to-t from-slate-950 via-slate-900/90 to-transparent">
             <button
               onClick={() => setInspectingBusiness(null)}
-              className="absolute top-4 right-4 p-2 rounded-full bg-black/40 hover:bg-black/60 text-white/90 hover:text-white transition-colors"
-              title="Close"
+              className="absolute top-4 right-4 p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
+              title="Close Profile"
             >
               <X className="w-5 h-5" />
             </button>
 
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div className="flex items-start gap-4">
-                <div className="w-20 h-20 rounded-2xl overflow-hidden bg-slate-800 border-2 border-white/20 shadow-xl shrink-0">
-                  {inspectingBusiness.imageUrl ? (
-                    <img
-                      src={inspectingBusiness.imageUrl}
-                      alt={inspectingBusiness.name}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-white text-2xl font-black bg-indigo-600">
-                      {inspectingBusiness.name.charAt(0)}
-                    </div>
-                  )}
+                <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl overflow-hidden bg-slate-800 border-2 border-white/20 shadow-xl shrink-0 flex items-center justify-center text-2xl font-black text-cyan-400">
+                  {country.flag}
                 </div>
 
-                <div>
+                <div className="space-y-1">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <h2 className="text-xl sm:text-2xl font-black tracking-tight text-white">
-                      {inspectingBusiness.name}
-                    </h2>
+                    <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                      {inspectingBusiness.businessCode}
+                    </span>
+                    <span className="text-xs font-bold text-indigo-300">
+                      {inspectingBusiness.industry}
+                    </span>
                     {inspectingBusiness.verified && (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
+                      <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
                         <ShieldCheck className="w-3.5 h-3.5" />
-                        Verified Business
-                      </span>
-                    )}
-                    {inspectingBusiness.source === 'serpapi' && (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-500/20 text-blue-200 border border-blue-400/30">
-                        Live Google Discovery
+                        Verified Enterprise
                       </span>
                     )}
                   </div>
 
-                  <div className="flex items-center gap-3 mt-1.5 text-xs text-slate-300 flex-wrap font-medium">
-                    <span className="font-mono px-2 py-0.5 bg-black/30 rounded border border-white/10">
-                      ID: {inspectingBusiness.businessCode}
-                    </span>
+                  <h1 className="text-xl sm:text-2xl font-black text-white leading-tight">
+                    {inspectingBusiness.name}
+                  </h1>
+
+                  <div className="flex items-center gap-3 text-xs text-slate-300 flex-wrap">
                     <span className="flex items-center gap-1">
-                      <MapPin className="w-3.5 h-3.5 text-rose-400" />
-                      {inspectingBusiness.location.address || `${inspectingBusiness.location.area}, ${inspectingBusiness.location.city}`}
+                      <MapPin className="w-3.5 h-3.5 text-cyan-400" />
+                      {inspectingBusiness.location.city}, {inspectingBusiness.location.country}
                     </span>
-                    {inspectingBusiness.openStatus && (
-                      <span className="flex items-center gap-1 text-emerald-400 font-semibold">
-                        <Clock className="w-3.5 h-3.5" />
-                        {inspectingBusiness.openStatus}
-                      </span>
-                    )}
+                    <span>•</span>
+                    <span className="text-cyan-300 font-semibold">{inspectingBusiness.primaryBusinessModel}</span>
+                    <span>•</span>
+                    <span>Est. {inspectingBusiness.establishedYear}</span>
                   </div>
                 </div>
               </div>
 
-              {/* Rating badge */}
-              <div className="bg-white/10 backdrop-blur-md rounded-2xl p-3.5 border border-white/10 text-center sm:text-right shrink-0">
-                <div className="flex items-center gap-1 text-amber-300 font-black text-xl justify-center sm:justify-end">
-                  <Star className="w-5 h-5 fill-amber-300" />
-                  <span>{inspectingBusiness.rating.toFixed(1)}</span>
+              {/* Trust Score Card */}
+              <div className="bg-white/10 backdrop-blur-md rounded-2xl p-3 border border-white/10 text-right shrink-0">
+                <div className="flex items-center gap-1 text-amber-300 font-black text-lg justify-end">
+                  <Star className="w-4 h-4 fill-amber-300" />
+                  <span>{inspectingBusiness.rating}</span>
                   <span className="text-xs text-slate-400 font-normal">/ 5.0</span>
                 </div>
-                <p className="text-[11px] text-slate-300 mt-0.5 font-medium">
-                  {inspectingBusiness.reviewCount} Google & Trade reviews
+                <p className="text-[10px] text-slate-300 font-medium">
+                  {inspectingBusiness.reviewCount} Network Reviews
                 </p>
+                <div className="mt-1 text-[10px] text-emerald-400 font-bold">
+                  Trust Score: {inspectingBusiness.trustScore}/100
+                </div>
               </div>
             </div>
 
-            {/* Action Bar (Google Maps, Directions, Call, Khata) */}
-            <div className="mt-5 pt-4 border-t border-white/10 flex flex-wrap items-center justify-between gap-3">
+            {/* Top Action Bar */}
+            <div className="mt-4 pt-4 border-t border-white/10 flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-xs text-slate-400 uppercase tracking-wider font-bold">Categories:</span>
-                {inspectingBusiness.roles.map(role => (
-                  <span
-                    key={role}
-                    className="px-2.5 py-0.5 rounded-lg text-xs font-bold bg-white text-slate-900 shadow-sm"
-                  >
-                    {role}
+                <span className="text-[11px] text-slate-400 font-bold uppercase">Business Models:</span>
+                {inspectingBusiness.businessModels.map(m => (
+                  <span key={m} className="px-2.5 py-0.5 rounded-lg text-xs font-bold bg-white text-slate-900">
+                    {m}
                   </span>
                 ))}
               </div>
 
               <div className="flex items-center gap-2 flex-wrap">
-                {/* Direct Google Maps Directions Navigation Button */}
+                {/* Google Maps Directions */}
                 <a
                   href={mapsNavUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md transition-all flex items-center gap-1.5"
+                  className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md transition-all flex items-center gap-1.5"
                 >
                   <Navigation className="w-3.5 h-3.5" />
-                  Get Directions (Google Maps)
+                  Google Maps
                 </a>
 
-                {/* Direct Khata Record Button */}
+                {/* Commercial Deal / Invoice */}
                 <button
-                  onClick={handleOpenKhata}
-                  className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs shadow-md transition-all flex items-center gap-1.5"
+                  onClick={handleOpenDeals}
+                  className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs shadow-md transition-all flex items-center gap-1.5"
                 >
                   <Receipt className="w-3.5 h-3.5" />
-                  Khata / Record Udhaar
-                </button>
-
-                {/* Direct Call / WhatsApp */}
-                <button
-                  onClick={() => {
-                    const phone = inspectingBusiness.phone.replace(/[^0-9]/g, '');
-                    window.open(`https://wa.me/${phone}?text=Hello%20${encodeURIComponent(inspectingBusiness.name)},%20I%20found%20your%20business%20on%20BizLink.`, '_blank');
-                  }}
-                  className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-semibold text-xs transition-colors flex items-center gap-1"
-                >
-                  <Phone className="w-3.5 h-3.5" />
-                  WhatsApp
+                  Record Deal / Invoice
                 </button>
               </div>
             </div>
@@ -212,420 +191,350 @@ export function BusinessProfileModal() {
         </div>
 
         {/* Modal Navigation Tabs */}
-        <div className="border-b border-slate-200 bg-slate-50 px-6 flex items-center gap-6 text-xs sm:text-sm font-bold text-slate-600">
+        <div className="border-b border-slate-200 bg-slate-50 px-6 flex items-center gap-6 text-xs sm:text-sm font-bold text-slate-600 overflow-x-auto shrink-0">
           <button
             onClick={() => setActiveTab('about')}
-            className={`py-3.5 border-b-2 transition-colors flex items-center gap-2 ${
-              activeTab === 'about'
-                ? 'border-indigo-600 text-indigo-600'
-                : 'border-transparent hover:text-slate-900'
-            }`}
+            className={`py-3.5 border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap ${activeTab === 'about' ? 'border-indigo-600 text-indigo-600' : 'border-transparent hover:text-slate-900'
+              }`}
           >
             <Building2 className="w-4 h-4" />
-            Overview & Directions
+            Overview & Markets
           </button>
 
           <button
-            onClick={() => setActiveTab('products')}
-            className={`py-3.5 border-b-2 transition-colors flex items-center gap-2 ${
-              activeTab === 'products'
-                ? 'border-indigo-600 text-indigo-600'
-                : 'border-transparent hover:text-slate-900'
-            }`}
+            onClick={() => setActiveTab('offerings')}
+            className={`py-3.5 border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap ${activeTab === 'offerings' ? 'border-indigo-600 text-indigo-600' : 'border-transparent hover:text-slate-900'
+              }`}
           >
             <Package className="w-4 h-4" />
-            Products & Catalog ({inspectingBusiness.products.length})
+            Offerings ({inspectingBusiness.offerings?.length || 0})
+          </button>
+
+          <button
+            onClick={() => setActiveTab('capabilities')}
+            className={`py-3.5 border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap ${activeTab === 'capabilities' ? 'border-indigo-600 text-indigo-600' : 'border-transparent hover:text-slate-900'
+              }`}
+          >
+            <Wrench className="w-4 h-4" />
+            Capabilities & Skills
+          </button>
+
+          <button
+            onClick={() => setActiveTab('credentials')}
+            className={`py-3.5 border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap ${activeTab === 'credentials' ? 'border-indigo-600 text-indigo-600' : 'border-transparent hover:text-slate-900'
+              }`}
+          >
+            <Award className="w-4 h-4" />
+            Certifications & Portfolio
           </button>
 
           <button
             onClick={() => setActiveTab('network')}
-            className={`py-3.5 border-b-2 transition-colors flex items-center gap-2 ${
-              activeTab === 'network'
-                ? 'border-indigo-600 text-indigo-600'
-                : 'border-transparent hover:text-slate-900'
-            }`}
+            className={`py-3.5 border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap ${activeTab === 'network' ? 'border-indigo-600 text-indigo-600' : 'border-transparent hover:text-slate-900'
+              }`}
           >
-            <Layers className="w-4 h-4" />
-            Supply Chain Position
-          </button>
-
-          <button
-            onClick={() => setActiveTab('reviews')}
-            className={`py-3.5 border-b-2 transition-colors flex items-center gap-2 ${
-              activeTab === 'reviews'
-                ? 'border-indigo-600 text-indigo-600'
-                : 'border-transparent hover:text-slate-900'
-            }`}
-          >
-            <Star className="w-4 h-4" />
-            Reviews ({inspectingBusiness.reviews.length})
+            <Handshake className="w-4 h-4" />
+            Network & Partnerships
           </button>
         </div>
 
-        {/* Modal Content Body */}
-        <div className="p-6 overflow-y-auto flex-1 space-y-6">
-          {/* TAB 1: ABOUT */}
+        {/* Tab Content Body */}
+        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          {/* Tab 1: About */}
           {activeTab === 'about' && (
             <div className="space-y-6">
-              {/* Trust Score & Metrics Banner */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200">
-                  <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">Trust Score</p>
-                  <div className="flex items-baseline gap-1 mt-1">
-                    <span className="text-2xl font-black text-slate-900">{inspectingBusiness.trustScore}</span>
-                    <span className="text-xs text-slate-500">/ 100</span>
-                  </div>
-                  <span className="text-[11px] text-emerald-600 font-semibold">Verified Location</span>
-                </div>
-
-                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200">
-                  <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">Fulfillment</p>
-                  <div className="flex items-baseline gap-1 mt-1">
-                    <span className="text-2xl font-black text-emerald-600">{inspectingBusiness.fulfillmentRate}%</span>
-                  </div>
-                  <span className="text-[11px] text-slate-500 font-medium">Reliable stock rate</span>
-                </div>
-
-                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200">
-                  <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">Min Order Value</p>
-                  <div className="flex items-baseline gap-1 mt-1">
-                    <span className="text-2xl font-black text-slate-900">
-                      ₹{(inspectingBusiness.minOrderValue || 200).toLocaleString('en-IN')}
-                    </span>
-                  </div>
-                  <span className="text-[11px] text-slate-500 font-medium">Flexible terms</span>
-                </div>
-
-                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200">
-                  <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">Price Level</p>
-                  <div className="flex items-baseline gap-1 mt-1">
-                    <span className="text-2xl font-black text-indigo-600">{inspectingBusiness.priceLevel || '₹₹'}</span>
-                  </div>
-                  <span className="text-[11px] text-slate-500 font-medium">Direct fair pricing</span>
-                </div>
-              </div>
-
-              {/* Description */}
               <div>
-                <h4 className="text-sm font-bold text-slate-900 mb-2">About the Business</h4>
-                <p className="text-xs sm:text-sm text-slate-600 leading-relaxed bg-slate-50 p-4 rounded-2xl border border-slate-200/70 font-medium">
-                  {inspectingBusiness.description}
-                </p>
+                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Executive Overview</h4>
+                <p className="text-sm text-slate-700 leading-relaxed mt-1">{inspectingBusiness.description}</p>
               </div>
 
-              {/* Google Maps Location & Navigation Box */}
-              <div className="p-4 bg-blue-50/70 border border-blue-200 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                <div className="flex items-start gap-3">
-                  <div className="p-2.5 rounded-xl bg-blue-600 text-white shrink-0">
-                    <Navigation className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h5 className="text-xs font-bold text-blue-950 uppercase tracking-wider">Google Maps Navigation</h5>
-                    <p className="text-xs text-blue-900 mt-0.5 font-medium">
-                      {inspectingBusiness.location.address || `${inspectingBusiness.location.area}, ${inspectingBusiness.location.city}`}
+              {/* Geographic Coverage & Target Markets */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-2">
+                  <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                    <Globe className="w-4 h-4 text-indigo-600" />
+                    Service Coverage & Distribution Scope
+                  </span>
+                  <div className="text-xs text-slate-600 space-y-1">
+                    <p>
+                      <strong className="text-slate-800">Operational Scope:</strong> {inspectingBusiness.serviceCoverage.scope}
                     </p>
-                    <p className="text-[11px] text-blue-700 mt-0.5">
-                      Coordinates: {inspectingBusiness.location.lat.toFixed(4)}, {inspectingBusiness.location.lng.toFixed(4)}
-                    </p>
+                    {inspectingBusiness.serviceCoverage.regionsOrCountriesServed && (
+                      <p>
+                        <strong className="text-slate-800">Regions Served:</strong>{' '}
+                        {inspectingBusiness.serviceCoverage.regionsOrCountriesServed.join(', ')}
+                      </p>
+                    )}
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 shrink-0">
-                  <a
-                    href={mapsNavUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-md transition-all flex items-center gap-1.5"
-                  >
-                    <Navigation className="w-3.5 h-3.5" />
-                    Open Turn-by-Turn GPS
-                  </a>
-                  <a
-                    href={googleMapsUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="p-2 bg-white hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-xl text-xs font-semibold transition-colors"
-                    title="View on Google Maps"
-                  >
-                    <ExternalLink className="w-4 h-4" />
-                  </a>
-                </div>
-              </div>
-
-              {/* Contact Details */}
-              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-3">
-                <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                  Contact & Business Verification
-                </h4>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                  <div className="flex items-center gap-2.5 text-slate-600">
-                    <Building2 className="w-4 h-4 text-slate-400" />
-                    <span>Manager: <strong className="text-slate-800">{inspectingBusiness.ownerName}</strong></span>
-                  </div>
-                  <div className="flex items-center gap-2.5 text-slate-600">
-                    <ShieldCheck className="w-4 h-4 text-slate-400" />
-                    <span>GSTIN / Code: <strong className="font-mono text-slate-800">{inspectingBusiness.gstNumber || inspectingBusiness.businessCode}</strong></span>
-                  </div>
-                  <div className="flex items-center gap-2.5 text-slate-600">
-                    <Phone className="w-4 h-4 text-slate-400" />
-                    <span>Phone: <strong className="text-slate-800">{inspectingBusiness.phone}</strong></span>
-                  </div>
-                  <div className="flex items-center gap-2.5 text-slate-600">
-                    <Mail className="w-4 h-4 text-slate-400" />
-                    <span>Email: <strong className="text-slate-800">{inspectingBusiness.email}</strong></span>
+                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-2">
+                  <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                    <Briefcase className="w-4 h-4 text-cyan-600" />
+                    Target Markets & Industry Sectors
+                  </span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {inspectingBusiness.businessRequirements?.targetMarkets ? (
+                      inspectingBusiness.businessRequirements.targetMarkets.map(m => (
+                        <span key={m} className="px-2.5 py-1 rounded-lg text-xs font-medium bg-white border border-slate-200 text-slate-700">
+                          {m}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-xs text-slate-500">Commercial Enterprises worldwide</span>
+                    )}
                   </div>
                 </div>
               </div>
 
-              {/* Inquiry Form */}
-              {!isMyBusiness && (
-                <div className="bg-indigo-50/70 p-4 rounded-2xl border border-indigo-100">
-                  <h4 className="text-xs font-bold text-indigo-900 uppercase tracking-wider mb-1 flex items-center gap-1.5">
-                    <Send className="w-3.5 h-3.5 text-indigo-600" />
-                    Send Direct Trade / Booking Inquiry
-                  </h4>
-                  <p className="text-xs text-indigo-700 mb-3">
-                    Inquire about rates, availability, or commercial procurement from {inspectingBusiness.name}.
-                  </p>
-                  <form onSubmit={handleSendInquiry} className="flex gap-2">
-                    <input
-                      type="text"
-                      value={inquiryText}
-                      onChange={e => setInquiryText(e.target.value)}
-                      placeholder="e.g. Inquiring about bulk discount / booking appointment..."
-                      className="flex-1 px-3.5 py-2.5 text-xs bg-white border border-indigo-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
-                    />
-                    <button
-                      type="submit"
-                      disabled={isInquirySent}
-                      className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-colors shadow-sm shrink-0"
-                    >
-                      {isInquirySent ? 'Dispatched!' : 'Send Inquiry'}
-                    </button>
-                  </form>
+              {/* Contact & Registration Information */}
+              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+                <div>
+                  <span className="text-slate-400 block font-bold text-[10px] uppercase">Corporate Phone</span>
+                  <span className="font-bold text-slate-800">{inspectingBusiness.phone}</span>
                 </div>
-              )}
+                <div>
+                  <span className="text-slate-400 block font-bold text-[10px] uppercase">Official Email</span>
+                  <span className="font-bold text-slate-800">{inspectingBusiness.email}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block font-bold text-[10px] uppercase">Tax / Business ID</span>
+                  <span className="font-mono font-bold text-slate-800">{inspectingBusiness.taxIdentifier || inspectingBusiness.gstNumber || 'Registered'}</span>
+                </div>
+              </div>
             </div>
           )}
 
-          {/* TAB 2: PRODUCTS */}
-          {activeTab === 'products' && (
+          {/* Tab 2: Offerings */}
+          {activeTab === 'offerings' && (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="text-sm font-bold text-slate-900">Products & Services Catalog</h4>
-                  <p className="text-xs text-slate-500">Available items, trade packs, and unit pricing</p>
-                </div>
-                <span className="text-xs font-bold px-2.5 py-1 bg-slate-100 text-slate-700 rounded-lg">
-                  {inspectingBusiness.products.length} Items Listed
+                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                  Universal Catalogue ({inspectingBusiness.offerings?.length || 0})
+                </h4>
+                <span className="text-xs text-slate-500">
+                  Operating in {inspectingBusiness.currency}
                 </span>
               </div>
 
-              {inspectingBusiness.products.length === 0 ? (
-                <div className="text-center py-10 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
-                  <Package className="w-10 h-10 text-slate-400 mx-auto mb-2" />
-                  <p className="text-sm font-bold text-slate-700">Catalog Available Directly at Store</p>
-                  <p className="text-xs text-slate-500 mt-1">
-                    Contact or visit {inspectingBusiness.name} for the full inventory and personalized rates.
-                  </p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-                  {inspectingBusiness.products.map(prod => (
-                    <div
-                      key={prod.id}
-                      className="p-4 rounded-2xl border border-slate-200 bg-white hover:border-indigo-300 hover:shadow-md transition-all flex flex-col justify-between"
-                    >
-                      <div>
-                        {prod.imageUrl && (
-                          <div className="w-full h-32 rounded-xl overflow-hidden bg-slate-100 mb-3">
-                            <img src={prod.imageUrl} alt={prod.name} className="w-full h-full object-cover" />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {inspectingBusiness.offerings && inspectingBusiness.offerings.length > 0 ? (
+                  inspectingBusiness.offerings.map(off => {
+                    const isProd = off.type === 'product';
+                    return (
+                      <div
+                        key={off.id}
+                        className="p-4 bg-white rounded-2xl border border-slate-200 shadow-xs flex flex-col justify-between"
+                      >
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span
+                              className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase flex items-center gap-1 ${isProd ? 'bg-indigo-50 text-indigo-700' : 'bg-cyan-50 text-cyan-700'
+                                }`}
+                            >
+                              {isProd ? <Package className="w-3 h-3" /> : <Wrench className="w-3 h-3" />}
+                              {isProd ? 'Product' : 'Service'}
+                            </span>
+                            <span className="text-xs text-slate-400 font-medium">{off.category}</span>
                           </div>
-                        )}
-                        <div className="flex items-start justify-between gap-2">
-                          <h5 className="text-xs sm:text-sm font-bold text-slate-900">{prod.name}</h5>
-                          <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-100 shrink-0">
-                            {prod.category}
+
+                          <h5 className="text-sm font-bold text-slate-900">{off.name}</h5>
+                          <p className="text-xs text-slate-500 line-clamp-2">{off.description}</p>
+
+                          {isProd ? (
+                            <div className="text-[11px] text-slate-600 bg-slate-50 p-2 rounded-xl flex justify-between">
+                              <span>MOQ: {off.moq} {off.unit}</span>
+                              <span>Lead: {off.leadTimeDays}d</span>
+                              <span className="text-emerald-600 font-bold">In Stock</span>
+                            </div>
+                          ) : (
+                            <div className="text-[11px] text-slate-600 bg-slate-50 p-2 rounded-xl space-y-0.5">
+                              <div>Delivery: <strong className="text-slate-800">{off.deliveryFormat || 'Remote'}</strong></div>
+                              <div>Turnaround: <strong className="text-slate-800">{off.turnaroundTime}</strong></div>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between">
+                          <span className="text-base font-black text-slate-900">
+                            {formatCurrencyAmount(off.price, off.currency)}
+                          </span>
+                          <span className="text-xs text-slate-400 capitalize">
+                            / {off.pricingModel.replace('_', ' ')}
                           </span>
                         </div>
-                        <p className="text-xs text-slate-600 mt-1.5 leading-relaxed font-medium">{prod.description}</p>
                       </div>
+                    );
+                  })
+                ) : (
+                  <p className="text-xs text-slate-500 italic">No catalogue listings published yet.</p>
+                )}
+              </div>
+            </div>
+          )}
 
-                      <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
-                        <div>
-                          <span className="text-slate-500 text-[11px]">Price: </span>
-                          <strong className="text-slate-900 font-black text-sm">
-                            ₹{prod.unitPrice.toLocaleString('en-IN')}
-                          </strong>
-                          <span className="text-slate-500 text-[11px]"> / {prod.unit}</span>
-                        </div>
-                        <div className="text-right">
-                          <span className="text-slate-500 text-[11px]">Min Order: </span>
-                          <strong className="text-slate-800 font-bold">{prod.moq} {prod.unit}</strong>
-                        </div>
-                      </div>
+          {/* Tab 3: Capabilities & Skills */}
+          {activeTab === 'capabilities' && (
+            <div className="space-y-6">
+              <div>
+                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
+                  Enterprise Capabilities & Operating Standards
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {inspectingBusiness.capabilities?.map((cap, i) => (
+                    <div key={i} className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center gap-2 text-xs font-semibold text-slate-800">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                      <span>{cap}</span>
                     </div>
                   ))}
+                </div>
+              </div>
+
+              <div>
+                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
+                  Specialized Skills, Tools & Domain Competencies
+                </h4>
+                <div className="flex flex-wrap gap-2">
+                  {inspectingBusiness.skills?.map((sk, i) => (
+                    <span key={i} className="px-3 py-1.5 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold">
+                      {sk}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Tab 4: Credentials & Portfolio */}
+          {activeTab === 'credentials' && (
+            <div className="space-y-6">
+              {/* Certifications */}
+              <div>
+                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
+                  Audited Certifications & Credentials
+                </h4>
+                <div className="space-y-2">
+                  {inspectingBusiness.certifications && inspectingBusiness.certifications.length > 0 ? (
+                    inspectingBusiness.certifications.map(c => (
+                      <div key={c.id} className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-2.5">
+                          <Award className="w-4 h-4 text-amber-500 shrink-0" />
+                          <div>
+                            <p className="font-bold text-slate-900">{c.name}</p>
+                            <p className="text-[10px] text-slate-500">Issued by {c.issuingBody} ({c.year})</p>
+                          </div>
+                        </div>
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          Verified
+                        </span>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-xs text-slate-500 italic">No certifications submitted.</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Portfolio */}
+              <div>
+                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
+                  Showcase Projects & Deliverables
+                </h4>
+                <div className="space-y-3">
+                  {inspectingBusiness.portfolio && inspectingBusiness.portfolio.length > 0 ? (
+                    inspectingBusiness.portfolio.map(p => (
+                      <div key={p.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-1 text-xs">
+                        <div className="flex items-center justify-between">
+                          <h5 className="font-bold text-slate-900">{p.title}</h5>
+                          <span className="text-[10px] text-slate-400">{p.year}</span>
+                        </div>
+                        {p.clientOrSector && (
+                          <span className="text-[11px] font-semibold text-indigo-600 block">
+                            Client/Sector: {p.clientOrSector}
+                          </span>
+                        )}
+                        <p className="text-slate-600 leading-relaxed">{p.description}</p>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-xs text-slate-500 italic">No case studies listed yet.</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Tab 5: Network & Partnerships */}
+          {activeTab === 'network' && (
+            <div className="space-y-6">
+              {/* Existing Relationship Status */}
+              {existingRel ? (
+                <div className="p-4 bg-indigo-50 rounded-2xl border border-indigo-200 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-black text-indigo-900 text-sm flex items-center gap-2">
+                      <Handshake className="w-5 h-5 text-indigo-600" />
+                      Connected: {existingRel.relationshipType}
+                    </span>
+                    <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800">
+                      Active Link
+                    </span>
+                  </div>
+                  <p className="text-xs text-indigo-800">{existingRel.category}</p>
+                </div>
+              ) : !isMyBusiness ? (
+                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+                  <h4 className="text-xs font-bold text-slate-900 uppercase">Form a Professional Connection</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-600 mb-1">Relationship Type</label>
+                      <select
+                        value={selectedRelType}
+                        onChange={e => setSelectedRelType(e.target.value as UniversalRelationshipType)}
+                        className="w-full p-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 font-medium"
+                      >
+                        {UNIVERSAL_RELATIONSHIP_TYPES.map(rel => (
+                          <option key={rel.id} value={rel.id}>{rel.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="flex items-end">
+                      <button
+                        onClick={() => connectBusinesses(inspectingBusiness, selectedRelType)}
+                        className="w-full py-2 bg-gradient-to-r from-indigo-600 to-blue-600 text-white rounded-xl text-xs font-bold shadow-md hover:from-indigo-700 hover:to-blue-700"
+                      >
+                        Establish Ecosystem Connection
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
+              {/* Requirements & Synergies */}
+              {inspectingBusiness.businessRequirements && (
+                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-3 text-xs">
+                  <h4 className="font-bold text-slate-900 uppercase">Partnership Synergies & Requirements</h4>
+                  {inspectingBusiness.businessRequirements.lookingForPartnerships && (
+                    <div>
+                      <span className="font-semibold text-slate-700 block">Looking for Partners:</span>
+                      <p className="text-slate-600 mt-0.5">{inspectingBusiness.businessRequirements.lookingForPartnerships.join(', ')}</p>
+                    </div>
+                  )}
+                  {inspectingBusiness.businessRequirements.seekingServices && (
+                    <div>
+                      <span className="font-semibold text-slate-700 block">Seeking Services:</span>
+                      <p className="text-slate-600 mt-0.5">{inspectingBusiness.businessRequirements.seekingServices.join(', ')}</p>
+                    </div>
+                  )}
+                  {inspectingBusiness.businessRequirements.seekingProductsOrSuppliers && (
+                    <div>
+                      <span className="font-semibold text-slate-700 block">Seeking Suppliers / Products:</span>
+                      <p className="text-slate-600 mt-0.5">{inspectingBusiness.businessRequirements.seekingProductsOrSuppliers.join(', ')}</p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
           )}
-
-          {/* TAB 3: NETWORK */}
-          {activeTab === 'network' && (
-            <div className="space-y-4">
-              <div>
-                <h4 className="text-sm font-bold text-slate-900">Supply Chain & Market Role</h4>
-                <p className="text-xs text-slate-500">
-                  How {inspectingBusiness.name} interacts across wholesale, retail, and consumer channels
-                </p>
-              </div>
-
-              <div className="bg-slate-900 text-white p-6 rounded-3xl border border-slate-800 space-y-6">
-                <div className="flex items-center justify-between text-xs text-slate-400 border-b border-slate-800 pb-3 font-semibold">
-                  <span>UPSTREAM SUPPLIERS</span>
-                  <span className="text-indigo-400 font-bold">DIGITAL TRADE CHAIN</span>
-                  <span>DOWNSTREAM CLIENTS</span>
-                </div>
-
-                <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-                  <div className="w-full md:w-1/3 bg-slate-800/80 p-4 rounded-2xl border border-slate-700 text-center">
-                    <span className="text-[10px] uppercase tracking-wider font-bold text-rose-400 block mb-1">
-                      Upstream Flow
-                    </span>
-                    <h5 className="text-xs font-bold text-white">Wholesalers & Depots</h5>
-                    <p className="text-[11px] text-slate-400 mt-1 font-medium">
-                      Sources from {inspectingBusiness.purchasesFrom.join(', ') || 'Certified Manufacturers'}
-                    </p>
-                  </div>
-
-                  <ArrowRight className="w-5 h-5 text-indigo-400 hidden md:block shrink-0" />
-
-                  <div className="w-full md:w-1/3 bg-indigo-950/80 p-4 rounded-2xl border-2 border-indigo-500 text-center shadow-lg">
-                    <span className="text-[10px] uppercase tracking-wider font-bold text-indigo-300 block mb-1">
-                      Active Business
-                    </span>
-                    <h5 className="text-sm font-black text-white">{inspectingBusiness.name}</h5>
-                    <div className="flex justify-center gap-1 mt-1.5 flex-wrap">
-                      {inspectingBusiness.roles.map(r => (
-                        <span key={r} className="text-[10px] bg-indigo-600/90 px-2 py-0.5 rounded-md text-white font-bold">
-                          {r}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-
-                  <ArrowRight className="w-5 h-5 text-indigo-400 hidden md:block shrink-0" />
-
-                  <div className="w-full md:w-1/3 bg-slate-800/80 p-4 rounded-2xl border border-slate-700 text-center">
-                    <span className="text-[10px] uppercase tracking-wider font-bold text-emerald-400 block mb-1">
-                      End Consumers & Buyers
-                    </span>
-                    <h5 className="text-xs font-bold text-white">Direct Customers</h5>
-                    <p className="text-[11px] text-slate-400 mt-1 font-medium">
-                      Serves local retail shoppers & contractors across {inspectingBusiness.location.city}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* TAB 4: REVIEWS */}
-          {activeTab === 'reviews' && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="text-sm font-bold text-slate-900">Google & Platform Reviews</h4>
-                  <p className="text-xs text-slate-500">Real feedback from verified buyers and Google Maps users</p>
-                </div>
-                <div className="flex items-center gap-1.5 text-amber-500 font-black text-sm bg-amber-50 px-3.5 py-1.5 rounded-xl border border-amber-200">
-                  <Star className="w-4 h-4 fill-amber-400" />
-                  <span>{inspectingBusiness.rating.toFixed(1)}</span>
-                  <span className="text-xs text-slate-500 font-normal">({inspectingBusiness.reviewCount})</span>
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                {inspectingBusiness.reviews.map(rev => (
-                  <div
-                    key={rev.id}
-                    className="p-4 rounded-2xl border border-slate-200 bg-slate-50/70 space-y-2"
-                  >
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <strong className="text-xs sm:text-sm text-slate-900">{rev.authorName}</strong>
-                          {rev.isVerifiedBuyer && (
-                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center gap-1">
-                              <CheckCircle2 className="w-3 h-3" /> Verified Buyer
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-[11px] text-slate-500 font-medium">
-                          {rev.authorRole || 'Customer'} • {rev.date}
-                        </p>
-                      </div>
-
-                      <div className="flex items-center gap-0.5 text-amber-400">
-                        {Array.from({ length: 5 }).map((_, i) => (
-                          <Star
-                            key={i}
-                            className={`w-3.5 h-3.5 ${
-                              i < Math.floor(rev.rating)
-                                ? 'fill-amber-400 text-amber-400'
-                                : 'text-slate-300'
-                            }`}
-                          />
-                        ))}
-                      </div>
-                    </div>
-
-                    <p className="text-xs text-slate-700 leading-relaxed italic font-medium">
-                      "{rev.comment}"
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Modal Footer */}
-        <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-3">
-          <div className="text-xs text-slate-500 font-medium">
-            Platform Code: <span className="font-mono font-bold text-slate-800">{inspectingBusiness.businessCode}</span>
-          </div>
-
-          <div className="flex items-center gap-2.5">
-            <button
-              onClick={() => setInspectingBusiness(null)}
-              className="px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-200 text-xs font-bold transition-colors"
-            >
-              Close
-            </button>
-
-            <button
-              onClick={handleOpenKhata}
-              className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-black shadow-sm transition-all flex items-center gap-1.5"
-            >
-              <Receipt className="w-3.5 h-3.5" />
-              Add Khata Entry
-            </button>
-
-            {!isMyBusiness && !isAlreadySupplier && (
-              <button
-                onClick={() => {
-                  addSupplierToNetwork(inspectingBusiness);
-                  setInspectingBusiness(null);
-                }}
-                className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black shadow-md transition-all flex items-center gap-1.5"
-              >
-                <CheckCircle2 className="w-4 h-4" />
-                Connect Supplier
-              </button>
-            )}
-          </div>
         </div>
       </div>
     </div>

@@ -8,19 +8,25 @@ export async function POST(req: NextRequest) {
   try {
     const body = (await req.json()) as SerpApiSearchParams;
 
-    const query = body.query || 'LED Bulbs';
-    const location = body.location || 'Ambala';
-    const radiusKm = body.radiusKm ? Number(body.radiusKm) : 20;
-    const businessType = body.businessType || 'All';
-    const category = body.category;
+    const query = body.query || '';
+    const location = body.location || 'Worldwide';
+    const radiusKm = body.radiusKm ? Number(body.radiusKm) : 50;
+    const industry = body.industry;
+    const subIndustry = body.subIndustry;
+    const businessModel = body.businessModel;
+    const offeringType = body.offeringType;
+    const country = body.country;
     const forceMock = body.forceMock === true;
 
     const result = await searchBusinessesService({
       query,
       location,
       radiusKm,
-      businessType,
-      category,
+      industry,
+      subIndustry,
+      businessModel,
+      offeringType,
+      country,
       forceMock,
     });
 
@@ -40,17 +46,17 @@ export async function POST(req: NextRequest) {
 export async function GET(req: NextRequest) {
   try {
     const searchParams = req.nextUrl.searchParams;
-    const query = searchParams.get('q') || searchParams.get('query') || 'LED Bulbs';
-    const location = searchParams.get('loc') || searchParams.get('location') || 'Ambala';
-    const radiusKm = searchParams.get('radius') ? Number(searchParams.get('radius')) : 20;
-    const businessType = (searchParams.get('type') || 'All') as any;
+    const query = searchParams.get('q') || searchParams.get('query') || '';
+    const location = searchParams.get('loc') || searchParams.get('location') || 'Worldwide';
+    const radiusKm = searchParams.get('radius') ? Number(searchParams.get('radius')) : 50;
+    const industry = searchParams.get('industry') || undefined;
     const forceMock = searchParams.get('mock') === 'true';
 
     const result = await searchBusinessesService({
       query,
       location,
       radiusKm,
-      businessType,
+      industry,
       forceMock,
     });
 

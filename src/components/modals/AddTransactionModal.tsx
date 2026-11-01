@@ -2,7 +2,19 @@
 
 import React, { useState, useEffect } from 'react';
 import { useBizLink } from '@/context/BizLinkContext';
-import { X, Receipt, ArrowDownRight, ArrowUpRight, IndianRupee, User, Store, Calendar, FileText, CheckCircle2 } from 'lucide-react';
+import {
+  X,
+  Receipt,
+  ArrowDownRight,
+  ArrowUpRight,
+  Coins,
+  Building2,
+  Calendar,
+  FileText,
+  Handshake,
+} from 'lucide-react';
+import { TransactionCommercialType } from '@/types';
+import { GLOBAL_CURRENCIES } from '@/data/taxonomy';
 
 export function AddTransactionModal() {
   const {
@@ -12,31 +24,36 @@ export function AddTransactionModal() {
     addTransaction,
     prefilledTxBusiness,
     setPrefilledTxBusiness,
+    activeCurrency,
+    myBusiness,
   } = useBizLink();
 
-  const [txType, setTxType] = useState<'Credit' | 'Debit'>('Debit'); // Default: Udhaar (You gave)
+  const [txType, setTxType] = useState<'Credit' | 'Debit'>('Debit');
+  const [commercialType, setCommercialType] = useState<TransactionCommercialType>('Invoice');
+  const [currency, setCurrency] = useState(activeCurrency || myBusiness.currency || 'USD');
   const [partnerMode, setPartnerMode] = useState<'select' | 'custom'>('select');
   const [selectedBizId, setSelectedBizId] = useState(businesses[1]?.id || '');
   const [customPartnerName, setCustomPartnerName] = useState('');
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
-  const [invoiceNumber, setInvoiceNumber] = useState(`KHATA-${Date.now().toString().substring(7)}`);
+  const [invoiceNumber, setInvoiceNumber] = useState(`INV-${Date.now().toString().substring(7)}`);
   const [dueDate, setDueDate] = useState(new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0]);
-  const [category, setCategory] = useState('Store Purchase / Khata');
-  const [paymentMode, setPaymentMode] = useState<'Credit / Udhaar' | 'Cash' | 'UPI' | 'Bank Transfer'>('Credit / Udhaar');
+  const [category, setCategory] = useState('Enterprise Commercial Agreement');
+  const [paymentMode, setPaymentMode] = useState<any>('Wire / SWIFT');
 
   useEffect(() => {
     if (prefilledTxBusiness) {
       setSelectedBizId(prefilledTxBusiness.id);
       setPartnerMode('select');
-      setDescription(`Store credit / purchase with ${prefilledTxBusiness.name}`);
+      setDescription(`Commercial contract milestone with ${prefilledTxBusiness.name}`);
+      setCurrency(prefilledTxBusiness.currency || activeCurrency);
     }
-  }, [prefilledTxBusiness]);
+  }, [prefilledTxBusiness, activeCurrency]);
 
   if (!isAddTransactionModalOpen) return null;
 
   const selectedBiz = businesses.find(b => b.id === selectedBizId) || businesses[0];
-  const partnerDisplayName = partnerMode === 'custom' && customPartnerName ? customPartnerName : (selectedBiz?.name || 'Local Customer');
+  const partnerDisplayName = partnerMode === 'custom' && customPartnerName ? customPartnerName : (selectedBiz?.name || 'Commercial Client');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -46,16 +63,18 @@ export function AddTransactionModal() {
       date: new Date().toISOString().split('T')[0],
       businessId: partnerMode === 'select' ? (selectedBiz?.id || 'biz_custom') : `cust_${Date.now()}`,
       businessName: partnerDisplayName,
-      businessRole: partnerMode === 'select' ? (selectedBiz?.primaryRole || 'Retailer') : 'Customer',
+      businessRole: partnerMode === 'select' ? selectedBiz?.industry : 'Commercial Partner',
       customerName: partnerDisplayName,
       type: txType,
+      commercialType,
       amount: Number(amount),
+      currency,
       status: 'Pending',
       invoiceNumber: invoiceNumber || `TX-${Date.now().toString().substring(6)}`,
-      description: description || `${txType === 'Debit' ? 'Udhaar / Gave goods on credit' : 'Jama / Received payment'} - ${partnerDisplayName}`,
-      dueDate: dueDate,
-      category: category,
-      paymentMode: paymentMode,
+      description: description || `${commercialType} with ${partnerDisplayName}`,
+      dueDate,
+      category,
+      paymentMode,
     });
 
     setPrefilledTxBusiness(null);
@@ -63,17 +82,17 @@ export function AddTransactionModal() {
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/70 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 animate-fade-in">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/75 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 animate-in fade-in duration-150">
       <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col">
         {/* Header */}
-        <div className="p-6 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white flex items-center justify-between border-b border-slate-800">
+        <div className="p-6 bg-gradient-to-r from-slate-950 via-indigo-950 to-slate-950 text-white flex items-center justify-between border-b border-slate-800">
           <div className="flex items-center gap-3">
             <div className="p-2.5 rounded-2xl bg-indigo-600 text-white shadow-lg">
               <Receipt className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base font-black tracking-tight">Record Khata / Credit-Debit</h3>
-              <p className="text-xs text-indigo-200">Track Udhaar & Jama history for any customer or shop</p>
+              <h3 className="text-base font-black tracking-tight">Record Commercial Deal / Invoice</h3>
+              <p className="text-xs text-indigo-200">Track invoices, milestones, retainers, and credit balances globally</p>
             </div>
           </div>
           <button
@@ -88,86 +107,151 @@ export function AddTransactionModal() {
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          {/* Type Toggle: Debit (You Gave / Udhaar) vs Credit (You Got / Jama) */}
+        <form onSubmit={handleSubmit} className="p-6 space-y-4 text-xs">
+          {/* Type Toggle: Debit (You Gave / Receivable) vs Credit (You Got / Received) */}
           <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-              Select Entry Type
-            </label>
+            <label className="block text-slate-700 font-bold mb-1.5">Commercial Balance Flow</label>
             <div className="grid grid-cols-2 gap-3">
               <button
                 type="button"
                 onClick={() => setTxType('Debit')}
-                className={`p-3.5 rounded-2xl border text-left flex items-center gap-3 transition-all ${
+                className={`p-3 rounded-2xl border-2 flex items-center gap-2.5 transition-all text-left ${
                   txType === 'Debit'
-                    ? 'bg-rose-50 border-rose-400 text-rose-950 ring-2 ring-rose-500/20 shadow-sm'
-                    : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                    ? 'border-rose-500 bg-rose-50/60 text-rose-950 shadow-xs'
+                    : 'border-slate-200 text-slate-600 hover:border-slate-300'
                 }`}
               >
-                <div className="p-2.5 rounded-xl bg-rose-100 text-rose-700">
-                  <ArrowUpRight className="w-5 h-5" />
+                <div className={`p-2 rounded-xl ${txType === 'Debit' ? 'bg-rose-500 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                  <ArrowDownRight className="w-4 h-4" />
                 </div>
                 <div>
-                  <p className="text-xs font-black text-rose-950">You Gave (Udhaar)</p>
-                  <p className="text-[11px] text-rose-600 font-medium">Customer owes you</p>
+                  <span className="font-bold block">Receivable / Debit</span>
+                  <span className="text-[10px] text-slate-500">You billed / outstanding</span>
                 </div>
               </button>
 
               <button
                 type="button"
                 onClick={() => setTxType('Credit')}
-                className={`p-3.5 rounded-2xl border text-left flex items-center gap-3 transition-all ${
+                className={`p-3 rounded-2xl border-2 flex items-center gap-2.5 transition-all text-left ${
                   txType === 'Credit'
-                    ? 'bg-emerald-50 border-emerald-400 text-emerald-950 ring-2 ring-emerald-500/20 shadow-sm'
-                    : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                    ? 'border-emerald-500 bg-emerald-50/60 text-emerald-950 shadow-xs'
+                    : 'border-slate-200 text-slate-600 hover:border-slate-300'
                 }`}
               >
-                <div className="p-2.5 rounded-xl bg-emerald-100 text-emerald-700">
-                  <ArrowDownRight className="w-5 h-5" />
+                <div className={`p-2 rounded-xl ${txType === 'Credit' ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                  <ArrowUpRight className="w-4 h-4" />
                 </div>
                 <div>
-                  <p className="text-xs font-black text-emerald-950">You Got (Jama)</p>
-                  <p className="text-[11px] text-emerald-600 font-medium">Payment received</p>
+                  <span className="font-bold block">Payment / Credit</span>
+                  <span className="text-[10px] text-slate-500">Received advance / paid</span>
                 </div>
               </button>
             </div>
           </div>
 
-          {/* Party Selection (Discovered Business or Custom Name) */}
+          {/* Commercial Classification */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-slate-700 font-bold mb-1">Contract Nature</label>
+              <select
+                value={commercialType}
+                onChange={e => setCommercialType(e.target.value as TransactionCommercialType)}
+                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              >
+                <option value="Invoice">Milestone / Invoice</option>
+                <option value="Retainer">Monthly Retainer</option>
+                <option value="Procurement">Purchase Order / Procurement</option>
+                <option value="Credit / Udhaar">Credit / Udhaar</option>
+                <option value="Debit / Jama">Debit / Jama</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-slate-700 font-bold mb-1">Payment Method</label>
+              <select
+                value={paymentMode}
+                onChange={e => setPaymentMode(e.target.value)}
+                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              >
+                <option value="Wire / SWIFT">Wire / SWIFT</option>
+                <option value="Bank Transfer">Bank Transfer / ACH</option>
+                <option value="Stripe / Card">Stripe / Credit Card</option>
+                <option value="UPI">UPI</option>
+                <option value="Cash">Cash</option>
+                <option value="Credit / Udhaar">Credit Terms</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Amount & Currency */}
+          <div className="grid grid-cols-3 gap-3">
+            <div className="col-span-2">
+              <label className="block text-slate-700 font-bold mb-1">Amount *</label>
+              <input
+                type="number"
+                min="1"
+                required
+                value={amount}
+                onChange={e => setAmount(e.target.value)}
+                placeholder="0.00"
+                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-mono text-base font-black text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-slate-700 font-bold mb-1">Currency</label>
+              <select
+                value={currency}
+                onChange={e => setCurrency(e.target.value)}
+                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              >
+                {GLOBAL_CURRENCIES.map(curr => (
+                  <option key={curr.code} value={curr.code}>
+                    {curr.code} ({curr.symbol})
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Partner Enterprise */}
           <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-                Customer / Shop Name
-              </label>
-              <div className="flex items-center gap-2 text-[11px] font-semibold">
-                <button
-                  type="button"
-                  onClick={() => setPartnerMode('select')}
-                  className={`px-2 py-0.5 rounded-md ${partnerMode === 'select' ? 'bg-indigo-100 text-indigo-700' : 'text-slate-500'}`}
-                >
-                  From Directory
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPartnerMode('custom')}
-                  className={`px-2 py-0.5 rounded-md ${partnerMode === 'custom' ? 'bg-indigo-100 text-indigo-700' : 'text-slate-500'}`}
-                >
-                  Custom Name
-                </button>
-              </div>
+            <label className="block text-slate-700 font-bold mb-1">Counterparty Enterprise / Client *</label>
+            <div className="flex gap-2 mb-2">
+              <button
+                type="button"
+                onClick={() => setPartnerMode('select')}
+                className={`flex-1 py-1 rounded-lg font-bold text-[11px] ${
+                  partnerMode === 'select' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'
+                }`}
+              >
+                Select from Network
+              </button>
+              <button
+                type="button"
+                onClick={() => setPartnerMode('custom')}
+                className={`flex-1 py-1 rounded-lg font-bold text-[11px] ${
+                  partnerMode === 'custom' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'
+                }`}
+              >
+                Custom Name
+              </button>
             </div>
 
             {partnerMode === 'select' ? (
               <select
                 value={selectedBizId}
                 onChange={e => setSelectedBizId(e.target.value)}
-                className="w-full px-3.5 py-2.5 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none bg-white font-medium"
+                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
               >
-                {businesses.map(b => (
-                  <option key={b.id} value={b.id}>
-                    {b.name} ({b.primaryRole} · {b.location.city})
-                  </option>
-                ))}
+                {businesses
+                  .filter(b => b.id !== myBusiness.id)
+                  .map(b => (
+                    <option key={b.id} value={b.id}>
+                      {b.name} ({b.industry} — {b.location.city}, {b.location.country})
+                    </option>
+                  ))}
               </select>
             ) : (
               <input
@@ -175,106 +259,63 @@ export function AddTransactionModal() {
                 required
                 value={customPartnerName}
                 onChange={e => setCustomPartnerName(e.target.value)}
-                placeholder="e.g. Ramesh Verma / City Cafe"
-                className="w-full px-3.5 py-2.5 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                placeholder="Enter client / partner company name"
+                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
             )}
           </div>
 
-          {/* Amount & Payment Mode */}
+          {/* Invoice ID & Due Date */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Amount (₹) *</label>
-              <div className="relative">
-                <span className="absolute left-3 top-2.5 text-xs font-bold text-slate-400">₹</span>
-                <input
-                  type="number"
-                  required
-                  min="1"
-                  step="any"
-                  value={amount}
-                  onChange={e => setAmount(e.target.value)}
-                  placeholder="500"
-                  className="w-full pl-7 pr-3 py-2.5 text-xs font-black text-slate-900 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Payment Mode</label>
-              <select
-                value={paymentMode}
-                onChange={e => setPaymentMode(e.target.value as any)}
-                className="w-full px-3.5 py-2.5 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none bg-white font-semibold"
-              >
-                <option value="Credit / Udhaar">Credit / Udhaar</option>
-                <option value="UPI">UPI (GPay/PhonePe/Paytm)</option>
-                <option value="Cash">Cash</option>
-                <option value="Bank Transfer">Bank Transfer / IMPS</option>
-              </select>
-            </div>
-          </div>
-
-          {/* Due Date & Category */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Expected Return / Due Date</label>
+              <label className="block text-slate-700 font-bold mb-1">Invoice / Ref Number</label>
               <input
-                type="date"
-                value={dueDate}
-                onChange={e => setDueDate(e.target.value)}
-                className="w-full px-3.5 py-2.5 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                type="text"
+                value={invoiceNumber}
+                onChange={e => setInvoiceNumber(e.target.value)}
+                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-mono text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Category / Tag</label>
-              <select
-                value={category}
-                onChange={e => setCategory(e.target.value)}
-                className="w-full px-3.5 py-2.5 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none bg-white font-medium"
-              >
-                <option value="Store Purchase / Khata">Store Purchase / Khata</option>
-                <option value="Bakery & Food Orders">Bakery & Food Orders</option>
-                <option value="Salon & Beauty Services">Salon & Beauty Services</option>
-                <option value="Auto Parts & Mechanic">Auto Parts & Mechanic</option>
-                <option value="Electronics & Repairs">Electronics & Repairs</option>
-                <option value="Grocery / Daily Ration">Grocery / Daily Ration</option>
-                <option value="Wholesale Lot Procurement">Wholesale Lot Procurement</option>
-              </select>
+              <label className="block text-slate-700 font-bold mb-1">Settlement / Due Date</label>
+              <input
+                type="date"
+                value={dueDate}
+                onChange={e => setDueDate(e.target.value)}
+                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
             </div>
           </div>
 
-          {/* Items / Description */}
+          {/* Description */}
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">Items / Bill Details</label>
-            <input
-              type="text"
+            <label className="block text-slate-700 font-bold mb-1">Description / Engagement Milestone</label>
+            <textarea
+              rows={2}
               value={description}
               onChange={e => setDescription(e.target.value)}
-              placeholder="e.g. 2 Cakes, 1 Sourdough Bread or Front Brake Pad replacement..."
-              className="w-full px-3.5 py-2.5 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+              placeholder="e.g. Q3 Dedicated Creative Squad Retainer & Deliverables"
+              className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
           </div>
 
-          {/* Actions */}
-          <div className="pt-3 border-t border-slate-200 flex items-center justify-end gap-3">
+          <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
             <button
               type="button"
               onClick={() => {
                 setPrefilledTxBusiness(null);
                 setIsAddTransactionModalOpen(false);
               }}
-              className="px-5 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
+              className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl font-bold"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-lg hover:shadow-indigo-500/25 transition-all flex items-center gap-1.5"
+              className="px-5 py-2 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white rounded-xl font-bold shadow-md shadow-indigo-600/20"
             >
-              <CheckCircle2 className="w-4 h-4" />
-              Save to Khata Bahi
+              Record Entry
             </button>
           </div>
         </form>
